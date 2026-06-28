@@ -285,23 +285,226 @@ Revenue and profit are relatively flat month-over-month at ~$0.35–0.40bn. Reve
 
 ---
 
-##  Data Model & Technical Reference
+## 📐 Data Model & Technical Reference
 
-### Pages Summary
+### Schema Architecture — Star Schema (Confirmed)
 
-| Page | Focus | Key Tables |
-|------|-------|-----------|
-| Executive | Cross-functional overview | All |
-| Supplier | Procurement & cost | supplier, product, date |
-| Production | Manufacturing & quality | facility, production, category |
-| Inventory | Stock health & coverage | product, inventory, safety_stock |
-| Shipment | Carrier & logistics | carrier, shipment, channel |
-| Sales | Revenue & growth | customer, product, channel, date |
+The data model follows a **classic star schema** with 5 fact tables and 5 dimension tables, purpose-built for a multi-domain supply chain analytics solution. All fact tables connect to shared dimensions, enabling cross-functional slicing without data duplication.
 
-### Measures Identified Across Pages
+```
+                        ┌─────────────────┐
+                        │  dim_customer    │
+                        │  channel_type    │
+                        │  country         │
+                        │  customer_id     │
+                        │  customer_key    │
+                        │  customer_name   │
+                        │  size            │
+                        └────────┬────────┘
+                                 │
+          ┌──────────────────────┼──────────────────────┐
+          │                      │                       │
+┌─────────▼──────┐    ┌──────────▼──────┐    ┌──────────▼──────┐
+│  fact_sales     │    │ fact_inventory   │    │ fact_shipment    │
+│  cost           │    │  date_key        │    │  carrier         │
+│  customer_id    │    │  facility_id     │    │  customer_id     │
+│  date_key       │    │  inventory_id    │    │  date_key (ship) │
+│  discount_amt   │    │  product_id      │    │  delivery_date_k │
+│  discount_pct   │    │  reorder_point   │    │  facility_id     │
+│  product_id     │    └─────────────────┘    │  product_id      │
+└────────┬────────┘                           │  quantity        │
+         │                                    │  shipment_id     │
+         │                                    │  shipping_cost   │
+         │                                    └──────────────────┘
+         │
+┌────────▼────────┐    ┌─────────────────────┐
+│ fact_production  │    │ fact_procurement     │
+│  date_key        │    │  lead_time_key       │
+│  defect_rate_pct │    │  order_date_key      │
+│  defective_units │    │  order_quantity      │
+│  facility_id     │    │  procurement_id      │
+│  product_id      │    │  product_id          │
+│  production_id   │    │  supplier_id         │
+│  quantity_prod   │    │  total_cost          │
+└────────┬────────┘    │  unit_cost           │
+         │             └──────────┬───────────┘
+         │                        │
+    ┌────▼────────────────────────▼────────────────┐
+    │               SHARED DIMENSIONS               │
+    │                                               │
+    │  dim_product        dim_facility              │
+    │  ─────────          ──────────                │
+    │  category           city                      │
+    │  color              country                   │
+    │  img                facility_id               │
+    │                     facility_key              │
+    │  dim_date           facility_name             │
+    │  ─────────          facility_type             │
+    │  date                                         │
+    │  date_key           dim_suppliers             │
+    │  month              ─────────────             │
+    │                     city                      │
+    │                     country                   │
+    │                     specialty                 │
+    │                     supplier_id               │
+    │                     supplier_key              │
+    └───────────────────────────────────────────────┘
+```
 
-`Total Revenue` · `Total Profit` · `Profit Margin %` · `Cost Ratio %` · `Perfect Order Rate %` · `Cash Cycle Days` · `Discount Rate %` · `Procurement Cost` · `Average Unit Cost` · `Average Lead Time` · `Delivery Performance` · `Total Units Produced` · `Total Defective Units` · `Average Defect Rate %` · `Quality Yield %` · `Production Efficiency` · `Production Growth MoM` · `Inventory Turnover` · `Days of Inventory` · `Stock Coverage Days` · `Inventory Value` · `Total Shipments` · `On-Time Delivery %` · `Total Shipping Cost` · `Delivery Score` · `Weekly Sales Quantity` · `Total Sales` · `Revenue Growth YoY`
+---
 
+### Dimension Tables — Full Column Reference
+
+#### `dim_customer`
+| Column | Description |
+|--------|-------------|
+| `channel_type` | Sales channel — Direct / Online / Retailer |
+| `country` | Customer's operating country |
+| `customer_id` | Surrogate key for joins |
+| `customer_key` | Natural/business key |
+| `customer_name` | Retailer name (Amazon, Target, Flipkart, etc.) |
+| `size` | Customer size/tier classification |
+
+#### `dim_product`
+| Column | Description |
+|--------|-------------|
+| `category` | Product category — Smartphone, Television, Appliance, Tablet, Wearable |
+| `color` | Product colour variant |
+| `img` | Product image URL (used in dashboard visual carousel) |
+
+#### `dim_suppliers`
+| Column | Description |
+|--------|-------------|
+| `city` | Supplier city location |
+| `country` | Supplier operating country |
+| `specialty` | Supplier's component specialty |
+| `supplier_id` | Surrogate key |
+| `supplier_key` | Natural business key |
+
+#### `dim_facility`
+| Column | Description |
+|--------|-------------|
+| `city` | Plant city |
+| `country` | Plant country |
+| `facility_id` | Surrogate key |
+| `facility_key` | Natural key |
+| `facility_name` | Plant name (Gumi, Noida, Campinas, etc.) |
+| `facility_type` | Classification of facility (manufacturing, warehouse, etc.) |
+
+#### `dim_date`
+| Column | Description |
+|--------|-------------|
+| `date` | Full calendar date |
+| `date_key` | Integer date key for fast joins |
+| `month` | Month name / number for time intelligence |
+
+---
+
+### Fact Tables — Full Column Reference
+
+#### `fact_sales` — *Revenue & Channel Transactions*
+| Column | Description |
+|--------|-------------|
+| `cost` | Unit or transaction cost |
+| `customer_id` | FK → dim_customer |
+| `date_key` | FK → dim_date |
+| `discount_amount` | Absolute discount value applied |
+| `discount_pct` | Discount percentage |
+| `product_id` | FK → dim_product |
+
+#### `fact_inventory` — *Stock Positions*
+| Column | Description |
+|--------|-------------|
+| `date_key` | FK → dim_date (snapshot date) |
+| `facility_id` | FK → dim_facility (where stock is held) |
+| `inventory_id` | Surrogate record key |
+| `product_id` | FK → dim_product |
+| `reorder_point` | Threshold triggering replenishment |
+
+#### `fact_production` — *Manufacturing Output & Quality*
+| Column | Description |
+|--------|-------------|
+| `date_key` | FK → dim_date |
+| `defect_rate_pct` | Percentage of defective output |
+| `defective_units` | Absolute count of defective units |
+| `facility_id` | FK → dim_facility (which plant produced) |
+| `product_id` | FK → dim_product |
+| `production_id` | Surrogate key |
+| `quantity_produced` | Units manufactured |
+
+#### `fact_procurement` — *Supplier Orders & Costs*
+| Column | Description |
+|--------|-------------|
+| `lead_time_key` | FK for lead time dimension or calculated days |
+| `order_date_key` | FK → dim_date (when ordered) |
+| `order_quantity` | Units ordered from supplier |
+| `procurement_id` | Surrogate key |
+| `product_id` | FK → dim_product |
+| `supplier_id` | FK → dim_suppliers |
+| `total_cost` | Total procurement spend for the order |
+| `unit_cost` | Per-unit cost from supplier |
+
+#### `fact_shipment` — *Logistics & Delivery Tracking*
+| Column | Description |
+|--------|-------------|
+| `carrier` | Logistics provider (DHL, FedEx, Maersk, etc.) |
+| `customer_id` | FK → dim_customer (ship-to party) |
+| `date_key` (ship) | FK → dim_date (ship date) |
+| `delivery_date_key` | FK → dim_date (actual delivery date) |
+| `facility_id` | FK → dim_facility (origin facility) |
+| `product_id` | FK → dim_product |
+| `quantity` | Units in the shipment |
+| `shipment_id` | Surrogate key |
+| `shipping_cost` | Cost of the shipment |
+
+---
+
+### Relationship Summary
+
+| Fact Table | Dimension Connections |
+|-----------|----------------------|
+| `fact_sales` | dim_customer · dim_product · dim_date |
+| `fact_inventory` | dim_product · dim_facility · dim_date |
+| `fact_production` | dim_product · dim_facility · dim_date |
+| `fact_procurement` | dim_product · dim_suppliers · dim_date |
+| `fact_shipment` | dim_product · dim_customer · dim_facility · dim_date |
+
+> **Design Note:** `dim_date` and `dim_product` are **conformed dimensions** — shared by all 5 fact tables, enabling unified time intelligence and product-level cross-domain analysis (e.g., production vs. sales vs. inventory for Galaxy S24 on the same timeline).
+
+---
+
+### Schema Design Assessment
+
+| Aspect | Rating | Note |
+|--------|--------|------|
+| Schema Type | ✅ Star Schema | Clean, performant for Power BI DAX |
+| Conformed Dimensions | ✅ Excellent | dim_date and dim_product shared across all facts |
+| Granularity Consistency | ✅ Good | All facts at transaction/snapshot level |
+| Fact Table Count | ✅ 5 Facts | Appropriate domain separation |
+| Dimension Completeness | ⚠️ Partial | dim_product only has category/color/img — SKU name or product_key missing from schema view |
+| Date Role-Playing | ✅ Present | fact_shipment uses ship_date and delivery_date as separate date keys |
+| Inventory Grain | ⚠️ Review | reorder_point stored in fact (should be in dim_product or a separate dim_inventory_policy) |
+
+---
+
+### Pages vs. Data Model Mapping
+
+| Dashboard Page | Primary Fact Table | Supporting Dimensions |
+|---------------|-------------------|----------------------|
+| Executive Overview | All 5 facts | All dimensions |
+| Supplier Overview | `fact_procurement` | dim_suppliers · dim_product · dim_date |
+| Production Overview | `fact_production` | dim_facility · dim_product · dim_date |
+| Inventory Performance | `fact_inventory` | dim_product · dim_facility · dim_date |
+| Shipment Performance | `fact_shipment` | dim_customer · dim_product · dim_facility · dim_date |
+| Sales Performance | `fact_sales` | dim_customer · dim_product · dim_date |
+
+---
+
+### Measures Catalogue (Identified Across All Pages)
+
+`Total Revenue` · `Total Profit` · `Profit Margin %` · `Cost Ratio %` · `Perfect Order Rate %` · `Cash Cycle Days` · `Discount Rate %` · `Procurement Cost` · `Average Unit Cost` · `Average Lead Time` · `Delivery Performance` · `Total Units Produced` · `Total Defective Units` · `Average Defect Rate %` · `Quality Yield %` · `Production Efficiency` · `Production Growth MoM` · `Procurement Cost Growth MoM` · `Inventory Turnover` · `Days of Inventory` · `Stock Coverage Days` · `Inventory Value` · `Understock Items Count` · `Overstock Items Count` · `Current Stock Level` · `Total Safety Stock` · `Total Reorder Point` · `Total Shipments` · `On-Time Delivery %` · `On-Time Delivery Rate` · `Delivered Shipment` · `Delayed Shipments` · `In-Transit Shipments` · `Total Shipping Cost` · `Delivery Score` · `Weekly Sales Quantity` · `Total Sales` · `iTotal Revenue` · `Revenue Growth YoY` · `Total Quantity Sold`
+
+---
 
 ##  Recommended Enhancements
 
