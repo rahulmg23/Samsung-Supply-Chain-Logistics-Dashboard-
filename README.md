@@ -135,7 +135,7 @@ South Korea (Gumi) dominates production. Vietnam (Bac Giang, Thai Nguyen), Brazi
 
 ---
 
-### 📦 Page 4 — Inventory Performance
+###  Page 4 — Inventory Performance
 
 **Purpose:** Stock health, overstock/understock balance, and reorder point management.
 
@@ -273,7 +273,7 @@ Revenue and profit are relatively flat month-over-month at ~$0.35–0.40bn. Reve
 
 ---
 
-## 🎯 Top 5 Executive Action Items
+## Top 5 Executive Action Items
 
 | Priority | Finding | Recommended Action |
 |----------|---------|-------------------|
@@ -285,9 +285,12 @@ Revenue and profit are relatively flat month-over-month at ~$0.35–0.40bn. Reve
 
 ---
 
-## 📐 Data Model & Technical Reference
+## Data Model & Technical Reference
 
 ### Schema Architecture — Star Schema (Confirmed)
+
+<img width="350" height="237" alt="Screenshot 2026-06-29 010354" src="https://github.com/user-attachments/assets/a15d9123-81f3-4990-8362-5544381a6067" />
+
 
 The data model follows a **classic star schema** with 5 fact tables and 5 dimension tables, purpose-built for a multi-domain supply chain analytics solution. All fact tables connect to shared dimensions, enabling cross-functional slicing without data duplication.
 
